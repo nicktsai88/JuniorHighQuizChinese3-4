@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字義辨正學習App</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Import Map to handle ES Modules for React and Lucide -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+            "canvas-confetti": "https://esm.sh/canvas-confetti@1.9.2"
+        }
+    }
+    </script>
+    
+    <style>
+        /* Custom scrollbar for better aesthetics - Warm Orange Theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #fff7ed; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #fdba74; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #fb923c; 
+        }
+        /* Hide scrollbar for clean horizontal scroll if needed */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Progress bar transition */
+        .progress-bar {
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Heart animation */
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.2); }
+            50% { transform: scale(1); }
+            75% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .heart-click {
+            animation: heartbeat 0.4s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-orange-50">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { BookOpen, HelpCircle, CheckCircle, XCircle, ArrowRight, RefreshCcw, List, Sun, User, LogOut, Zap, Heart, BookX, Brain } from 'lucide-react';
+        import confetti from 'canvas-confetti';
+
+        // STORAGE KEYS - Word-Meaning-App-v2 (Data Updated)
+        const STORAGE_PREFIX = 'JuniorHighQuizChinese3-4';
+        const KEY_USERS = `${STORAGE_PREFIX}_users`;
+        
+        // Helper to get dynamic keys
+        const getKeyFavorites = (user) => `${STORAGE_PREFIX}_fav_${user}`;
+        const getKeyMistakes = (user) => `${STORAGE_PREFIX}_mistake_${user}`;
+        const getKeyProgress = (user) => `${STORAGE_PREFIX}_progress_${user}`;
+
+        // 字義辨正完整資料庫 (Fully Updated)
+        const rawData = [
+            // 1. 為
+            { id: 1, question: "釋之「為」廷尉", answer: "擔任、充當 (ㄨㄟˊ)", distractors: ["因為 (ㄨㄟˋ)", "被 (ㄨㄟˋ)", "替、給 (ㄨㄟˋ)"] },
+            { id: 2, question: "以天下「為」家", answer: "當作、作為 (ㄨㄟˊ)", distractors: ["因為 (ㄨㄟˋ)", "擔任 (ㄨㄟˊ)", "被 (ㄨㄟˋ)"] },
+            { id: 3, question: "指鹿「為」馬", answer: "當作、作為 (ㄨㄟˊ)", distractors: ["因為 (ㄨㄟˋ)", "擔任 (ㄨㄟˊ)", "被 (ㄨㄟˋ)"] },
+            { id: 4, question: "失敗乃成功之「為」(母)", answer: "是 (ㄨㄟˊ)", distractors: ["因為 (ㄨㄟˋ)", "作為 (ㄨㄟˊ)", "被 (ㄨㄟˋ)"] },
+            { id: 5, question: "一傾而天下用法皆「為」輕重", answer: "因為 (ㄨㄟˋ)", distractors: ["擔任 (ㄨㄟˊ)", "作為 (ㄨㄟˊ)", "被 (ㄨㄟˋ)"] },
+            { id: 6, question: "「為」民服務", answer: "替、給 (ㄨㄟˋ)", distractors: ["因為 (ㄨㄟˋ)", "擔任 (ㄨㄟˊ)", "作為 (ㄨㄟˊ)"] },
+            { id: 7, question: "「為」國爭光", answer: "替、給 (ㄨㄟˋ)", distractors: ["因為 (ㄨㄟˋ)", "擔任 (ㄨㄟˊ)", "作為 (ㄨㄟˊ)"] },
+            { id: 8, question: "「為」人所惡", answer: "被 (ㄨㄟˋ)", distractors: ["因為 (ㄨㄟˋ)", "替 (ㄨㄟˋ)", "擔任 (ㄨㄟˊ)"] },
+            
+            // 2. 之
+            { id: 9, question: "屬「之」廷尉 (指人犯)", answer: "代詞：他", distractors: ["代詞：它(指罪)", "助詞：的", "動詞：往"] },
+            { id: 10, question: "上使立誅「之」 (指人犯)", answer: "代詞：他", distractors: ["代詞：它(指罪)", "助詞：的", "動詞：往"] },
+            { id: 11, question: "今法如此而更重「之」 (指罪)", answer: "代詞：它", distractors: ["代詞：他(指人犯)", "助詞：無義", "動詞：往"] },
+            { id: 12, question: "唯陛下察「之」 (指這件事)", answer: "代詞：它", distractors: ["代詞：他(指人犯)", "助詞：的", "助詞：無義"] },
+            { id: 13, question: "久「之」", answer: "助詞：無義，順適語氣", distractors: ["代詞：它", "助詞：的", "動詞：往"] },
+            { id: 14, question: "天下「之」平也", answer: "助詞：的", distractors: ["代詞：它", "助詞：無義", "動詞：往"] },
+            { id: 15, question: "送孟浩然「之」廣陵", answer: "動詞：往、去", distractors: ["助詞：的", "代詞：它", "助詞：無義"] },
+
+            // 3. 當
+            { id: 16, question: "廷尉奏「當」", answer: "名詞：判決、判罪 (ㄉㄤ)", distractors: ["動詞：應當 (ㄉㄤ)", "動詞：擔任 (ㄉㄤ)", "形容詞：合宜 (ㄉㄤˋ)"] },
+            { id: 17, question: "廷尉「當」是也", answer: "名詞：判決、判罪 (ㄉㄤ)", distractors: ["動詞：應當 (ㄉㄤ)", "動詞：擔任 (ㄉㄤ)", "形容詞：合宜 (ㄉㄤˋ)"] },
+            { id: 18, question: "一人犯蹕，「當」罰金", answer: "動詞：判決、判處 (ㄉㄤ)", distractors: ["動詞：應當 (ㄉㄤ)", "動詞：面對 (ㄉㄤ)", "動詞：抵押 (ㄉㄤˋ)"] },
+            { id: 19, question: "廷尉乃「當」之罰金", answer: "動詞：判決、判處 (ㄉㄤ)", distractors: ["動詞：應當 (ㄉㄤ)", "動詞：面對 (ㄉㄤ)", "動詞：抵押 (ㄉㄤˋ)"] },
+            { id: 20, question: "「當」仁不讓", answer: "應當 (ㄉㄤ)", distractors: ["擔任 (ㄉㄤ)", "判決 (ㄉㄤ)", "合宜 (ㄉㄤˋ)"] },
+            { id: 21, question: "「當」面", answer: "面對、對著 (ㄉㄤ)", distractors: ["擔任 (ㄉㄤ)", "應當 (ㄉㄤ)", "合宜 (ㄉㄤˋ)"] },
+            { id: 22, question: "「當」家作主", answer: "擔任 (ㄉㄤ)", distractors: ["面對 (ㄉㄤ)", "應當 (ㄉㄤ)", "抵押 (ㄉㄤˋ)"] },
+            { id: 23, question: "銳不可「當」", answer: "匹敵、抵抗 (ㄉㄤ)", distractors: ["應當 (ㄉㄤ)", "擔任 (ㄉㄤ)", "合宜 (ㄉㄤˋ)"] },
+            { id: 24, question: "處置恰「當」", answer: "合宜、適合 (ㄉㄤˋ)", distractors: ["應當 (ㄉㄤ)", "判決 (ㄉㄤ)", "抵押 (ㄉㄤˋ)"] },
+            { id: 25, question: "賞罰不「當」", answer: "合宜、適合 (ㄉㄤˋ)", distractors: ["應當 (ㄉㄤ)", "判決 (ㄉㄤ)", "抵押 (ㄉㄤˋ)"] },
+            { id: 26, question: "典「當」", answer: "抵押 (ㄉㄤˋ)", distractors: ["合宜 (ㄉㄤˋ)", "應當 (ㄉㄤ)", "擔任 (ㄉㄤ)"] },
+            { id: 27, question: "勾「當」", answer: "圈套、詭計 (ㄉㄤˋ)", distractors: ["抵押 (ㄉㄤˋ)", "合宜 (ㄉㄤˋ)", "應當 (ㄉㄤ)"] },
+
+            // 4. 行
+            { id: 28, question: "上「行」，出中渭橋", answer: "出巡 (ㄒㄧㄥˊ)", distractors: ["走 (ㄒㄧㄥˊ)", "隊伍 (ㄏㄤˊ)", "實行 (ㄒㄧㄥˊ)"] },
+            { id: 29, question: "「行」人", answer: "走、走路 (ㄒㄧㄥˊ)", distractors: ["出巡 (ㄒㄧㄥˊ)", "實行 (ㄒㄧㄥˊ)", "隊伍 (ㄏㄤˊ)"] },
+            { id: 30, question: "直「行」", answer: "走、走路 (ㄒㄧㄥˊ)", distractors: ["出巡 (ㄒㄧㄥˊ)", "實行 (ㄒㄧㄥˊ)", "隊伍 (ㄏㄤˊ)"] },
+            { id: 31, question: "「行」善", answer: "實行、做 (ㄒㄧㄥˊ)", distractors: ["走 (ㄒㄧㄥˊ)", "出巡 (ㄒㄧㄥˊ)", "行為 (ㄒㄧㄥˋ)"] },
+            { id: 32, question: "身體力「行」", answer: "實行、做 (ㄒㄧㄥˊ)", distractors: ["走 (ㄒㄧㄥˊ)", "出巡 (ㄒㄧㄥˊ)", "行為 (ㄒㄧㄥˋ)"] },
+            { id: 33, question: "品「行」", answer: "行為舉止 (ㄒㄧㄥˋ)", distractors: ["走 (ㄒㄧㄥˊ)", "隊伍 (ㄏㄤˊ)", "實行 (ㄒㄧㄥˊ)"] },
+            { id: 34, question: "德「行」", answer: "行為舉止 (ㄒㄧㄥˋ)", distractors: ["走 (ㄒㄧㄥˊ)", "隊伍 (ㄏㄤˊ)", "實行 (ㄒㄧㄥˊ)"] },
+            { id: 35, question: "以為「行」已過 (皇帝車隊)", answer: "隊伍 (ㄏㄤˊ)", distractors: ["走 (ㄒㄧㄥˊ)", "商店 (ㄏㄤˊ)", "出巡 (ㄒㄧㄥˊ)"] },
+            { id: 36, question: "銀「行」", answer: "商店、營業機構 (ㄏㄤˊ)", distractors: ["隊伍 (ㄏㄤˊ)", "走 (ㄒㄧㄥˊ)", "實行 (ㄒㄧㄥˊ)"] },
+            { id: 37, question: "車「行」", answer: "商店、營業機構 (ㄏㄤˊ)", distractors: ["隊伍 (ㄏㄤˊ)", "走 (ㄒㄧㄥˊ)", "實行 (ㄒㄧㄥˊ)"] },
+            { id: 38, question: "一「行」白鷺", answer: "量詞 (ㄏㄤˊ)", distractors: ["隊伍 (ㄏㄤˊ)", "走 (ㄒㄧㄥˊ)", "出巡 (ㄒㄧㄥˊ)"] },
+
+            // 5. 令
+            { id: 39, question: "「令」他馬", answer: "假使 (ㄌㄧㄥˋ)", distractors: ["命令 (ㄌㄧㄥˋ)", "美好的 (ㄌㄧㄥˋ)", "使 (ㄌㄧㄥˋ)"] },
+            { id: 40, question: "巧言「令」色", answer: "美好的、善的 (ㄌㄧㄥˋ)", distractors: ["命令 (ㄌㄧㄥˋ)", "假使 (ㄌㄧㄥˋ)", "使 (ㄌㄧㄥˋ)"] },
+            { id: 41, question: "人事命「令」", answer: "命令、法令 (ㄌㄧㄥˋ)", distractors: ["美好的 (ㄌㄧㄥˋ)", "假使 (ㄌㄧㄥˋ)", "使 (ㄌㄧㄥˋ)"] },
+            { id: 42, question: "三「令」五申", answer: "命令、法令 (ㄌㄧㄥˋ)", distractors: ["美好的 (ㄌㄧㄥˋ)", "假使 (ㄌㄧㄥˋ)", "使 (ㄌㄧㄥˋ)"] },
+            { id: 43, question: "「令」人髮指", answer: "使、讓 (ㄌㄧㄥˋ)", distractors: ["命令 (ㄌㄧㄥˋ)", "假使 (ㄌㄧㄥˋ)", "美好的 (ㄌㄧㄥˋ)"] },
+
+            // 6. 乃
+            { id: 44, question: "而廷尉「乃」當之罰金", answer: "竟、居然 (ㄋㄞˇ)", distractors: ["是 (ㄋㄞˇ)", "於是 (ㄋㄞˇ)", "你的 (ㄋㄞˇ)"] },
+            { id: 45, question: "失敗「乃」成功之母", answer: "是 (ㄋㄞˇ)", distractors: ["竟 (ㄋㄞˇ)", "於是 (ㄋㄞˇ)", "你的 (ㄋㄞˇ)"] },
+            { id: 46, question: "家祭無忘告「乃」翁", answer: "你、你的 (ㄋㄞˇ)", distractors: ["是 (ㄋㄞˇ)", "竟 (ㄋㄞˇ)", "於是 (ㄋㄞˇ)"] },
+            { id: 47, question: "「乃」取一葫蘆置於地", answer: "於是、然後 (ㄋㄞˇ)", distractors: ["是 (ㄋㄞˇ)", "竟 (ㄋㄞˇ)", "你的 (ㄋㄞˇ)"] },
+
+            // 7. 是
+            { id: 48, question: "「是」法不信於民也", answer: "代詞：此、這", distractors: ["形容詞：正確的", "動詞：贊成", "助詞：賓語提前"] },
+            { id: 49, question: "廷尉當「是」也", answer: "形容詞：正確的", distractors: ["代詞：此", "動詞：贊成", "助詞：賓語提前"] },
+            { id: 50, question: "「是」古非今", answer: "動詞：贊成、稱讚", distractors: ["代詞：此", "形容詞：正確的", "助詞：賓語提前"] },
+            { id: 51, question: "唯利「是」圖", answer: "助詞：表示賓語提前", distractors: ["代詞：此", "形容詞：正確的", "動詞：贊成"] },
+            { id: 52, question: "主義「是」從", answer: "助詞：表示賓語提前", distractors: ["代詞：此", "形容詞：正確的", "動詞：贊成"] },
+
+            // 8. 固
+            { id: 53, question: "「固」不敗傷我乎", answer: "副詞：豈、難道", distractors: ["形容詞：堅定", "形容詞：堅固", "副詞：原本"] },
+            { id: 54, question: "「固」執", answer: "堅定、堅決", distractors: ["豈 (副詞)", "堅固", "原本"] },
+            { id: 55, question: "「固」守", answer: "堅定、堅決", distractors: ["豈 (副詞)", "堅固", "原本"] },
+            { id: 56, question: "根深蒂「固」", answer: "堅固", distractors: ["堅定", "豈 (副詞)", "原本"] },
+            { id: 57, question: "「固」有的道德", answer: "原本、本來", distractors: ["堅定", "堅固", "豈 (副詞)"] },
+
+            // 9. 屬
+            { id: 58, question: "「屬」之廷尉", answer: "交付、託付 (ㄓㄨˇ)", distractors: ["部下 (ㄕㄨˇ)", "親眷 (ㄕㄨˇ)", "歸於 (ㄕㄨˇ)"] },
+            { id: 59, question: "「屬」意", answer: "意念集中 (ㄓㄨˇ)", distractors: ["歸於 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "親眷 (ㄕㄨˇ)"] },
+            { id: 60, question: "部「屬」", answer: "部下 (ㄕㄨˇ)", distractors: ["親眷 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "交付 (ㄓㄨˇ)"] },
+            { id: 61, question: "下「屬」", answer: "部下 (ㄕㄨˇ)", distractors: ["親眷 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "交付 (ㄓㄨˇ)"] },
+            { id: 62, question: "親「屬」", answer: "親眷 (ㄕㄨˇ)", distractors: ["部下 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "意念集中 (ㄓㄨˇ)"] },
+            { id: 63, question: "家「屬」", answer: "親眷 (ㄕㄨˇ)", distractors: ["部下 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "意念集中 (ㄓㄨˇ)"] },
+            { id: 64, question: "眷「屬」", answer: "親眷 (ㄕㄨˇ)", distractors: ["部下 (ㄕㄨˇ)", "類別 (ㄕㄨˇ)", "意念集中 (ㄓㄨˇ)"] },
+            { id: 65, question: "金「屬」", answer: "類別 (ㄕㄨˇ)", distractors: ["歸於 (ㄕㄨˇ)", "親眷 (ㄕㄨˇ)", "交付 (ㄓㄨˇ)"] },
+            { id: 66, question: "梅杏桃李之「屬」", answer: "類別 (ㄕㄨˇ)", distractors: ["歸於 (ㄕㄨˇ)", "親眷 (ㄕㄨˇ)", "交付 (ㄓㄨˇ)"] },
+            { id: 67, question: "「屬」於", answer: "歸於 (ㄕㄨˇ)", distractors: ["類別 (ㄕㄨˇ)", "部下 (ㄕㄨˇ)", "意念集中 (ㄓㄨˇ)"] },
+
+            // 10. 平
+            { id: 68, question: "廷尉，天下之「平」也", answer: "標準、準則", distractors: ["平坦", "安寧", "壓抑"] },
+            { id: 69, question: "「平」地", answer: "平坦", distractors: ["標準", "安寧", "征服"] },
+            { id: 70, question: "履險如夷(夷通平)", answer: "平坦", distractors: ["標準", "安寧", "征服"] },
+            { id: 71, question: "風「平」浪靜", answer: "安寧", distractors: ["平坦", "標準", "壓抑"] },
+            { id: 72, question: "怨氣難「平」", answer: "壓抑", distractors: ["安寧", "標準", "征服"] },
+            { id: 73, question: "「平」亂", answer: "征服", distractors: ["壓抑", "平坦", "標準"] },
+
+            // 11. 下
+            { id: 74, question: "今既「下」廷尉", answer: "交付 (上位給下位)", distractors: ["低處", "降落", "裡"] },
+            { id: 75, question: "從橋「下」走出", answer: "低處、底部", distractors: ["交付", "降落", "裡"] },
+            { id: 76, question: "順流而「下」", answer: "降落、去", distractors: ["交付", "低處", "裡"] },
+            { id: 77, question: "煙花三月「下」揚州", answer: "降落、去", distractors: ["交付", "低處", "裡"] },
+            { id: 78, question: "言「下」之意", answer: "裡、內", distractors: ["交付", "低處", "降落"] },
+
+            // 12. 於
+            { id: 79, question: "是法不信「於」民也", answer: "被 (表被動)", distractors: ["在 (表處所)", "比 (表比較)", "給 (表對象)"] },
+            { id: 80, question: "苛政猛「於」虎", answer: "比 (表比較)", distractors: ["被 (表被動)", "在 (表處所)", "給 (表對象)"] },
+            { id: 81, question: "戰「於」長勺", answer: "在 (表處所)", distractors: ["被 (表被動)", "從 (表來源)", "給 (表對象)"] },
+            { id: 82, question: "己所不欲，勿施「於」人", answer: "給 (表對象)", distractors: ["在 (表處所)", "被 (表被動)", "比 (表比較)"] },
+            { id: 83, question: "得之「於」人者太多", answer: "從 (表來源)", distractors: ["給 (表對象)", "在 (表處所)", "比 (表比較)"] },
+
+            // 13. 唯
+            { id: 84, question: "「唯」陛下察之", answer: "句首助詞：希望語氣", distractors: ["只有", "雖然", "獨"] },
+            { id: 85, question: "「唯」利是圖", answer: "只有", distractors: ["希望語氣", "雖然", "連詞"] },
+            { id: 86, question: "「唯」才是用", answer: "只有", distractors: ["希望語氣", "雖然", "連詞"] },
+            { id: 87, question: "「唯」一", answer: "獨、只有", distractors: ["希望語氣", "雖然", "連詞"] },
+            { id: 88, question: "「唯」有", answer: "獨、只有", distractors: ["希望語氣", "雖然", "連詞"] },
+            { id: 89, question: "「唯」天子亦不說也", answer: "連詞：雖然、縱使", distractors: ["只有", "希望語氣", "獨"] },
+
+            // 14. 方
+            { id: 90, question: "且「方」其時", answer: "正當", distractors: ["地方", "方法", "正直"] },
+            { id: 91, question: "有朋自遠「方」來", answer: "地方", distractors: ["正當", "方法", "正直"] },
+            { id: 92, question: "千「方」百計", answer: "方法", distractors: ["地方", "正當", "正直"] },
+            { id: 93, question: "品行「方」正", answer: "正直", distractors: ["方法", "地方", "正當"] },
+
+            // 15. 傾
+            { id: 94, question: "一「傾」而天下用法皆為輕重", answer: "偏斜、不正", distractors: ["倒塌", "竭盡", "傾聽"] },
+            { id: 95, question: "大廈將「傾」", answer: "倒塌", distractors: ["偏斜", "竭盡", "傾向"] },
+            { id: 96, question: "「傾」囊相授", answer: "竭盡", distractors: ["偏斜", "倒塌", "傾向"] },
+
+            // 16. 賴
+            { id: 97, question: "吾馬「賴」柔和", answer: "幸虧、憑藉", distractors: ["抵賴", "不承認", "依賴"] },
+            { id: 98, question: "抵「賴」", answer: "抵賴、不承認", distractors: ["幸虧", "憑藉", "依靠"] },
+            { id: 99, question: "耍無「賴」", answer: "抵賴、不承認", distractors: ["幸虧", "憑藉", "依靠"] },
+
+            // 17. 走
+            { id: 100, question: "見乘輿車騎即「走」耳", answer: "奔跑 (古義)", distractors: ["步行 (今義)", "離開", "逃避"] },
+            { id: 101, question: "「走」路", answer: "步行 (今義)", distractors: ["奔跑", "離開", "經過"] },
+            { id: 102, question: "遠「走」高飛", answer: "離開", distractors: ["奔跑", "步行", "經過"] },
+
+            // 18. 誅
+            { id: 103, question: "上使立「誅」之", answer: "殺", distractors: ["責備", "討伐", "懲罰"] },
+            { id: 104, question: "口「誅」筆伐", answer: "責備", distractors: ["殺", "消滅", "攻擊"] },
+
+            // 19. 乘
+            { id: 105, question: "「乘」輿馬驚", answer: "搭坐 (ㄔㄥˊ)", distractors: ["趁著 (ㄔㄥˊ)", "順著 (ㄔㄥˊ)", "計算 (ㄔㄥˊ)"] },
+            { id: 106, question: "「乘」風破浪", answer: "趁著、順著 (ㄔㄥˊ)", distractors: ["搭坐 (ㄔㄥˊ)", "計算 (ㄔㄥˊ)", "追逐 (ㄔㄥˊ)"] },
+
+            // 20. 離
+            { id: 107, question: "背「離」", answer: "背叛", distractors: ["分別", "距離", "離開"] },
+            { id: 108, question: "「離」經叛道", answer: "背叛", distractors: ["分別", "距離", "離開"] },
+            { id: 109, question: "「離」群索居", answer: "分別、分開", distractors: ["背叛", "距離", "逃避"] },
+            { id: 110, question: "「離」家近", answer: "距、相隔", distractors: ["背叛", "分別", "離開"] },
+
+            // 21. 類
+            { id: 111, question: "蕨「類」", answer: "種別", distractors: ["相似", "模仿", "種類"] },
+            { id: 112, question: "畫虎「類」犬", answer: "相似", distractors: ["種別", "種類", "不像"] },
+
+            // 22. 流
+            { id: 113, question: "「流」出的水", answer: "移動", distractors: ["派別", "等級", "傳播"] },
+            { id: 114, question: "飛「流」直下", answer: "水的通稱", distractors: ["移動", "派別", "等級"] },
+            { id: 115, question: "九「流」十家", answer: "派別", distractors: ["移動", "等級", "趨向"] },
+            { id: 116, question: "上「流」", answer: "品類、等級", distractors: ["派別", "移動", "趨向"] },
+            { id: 117, question: "「流」芳百世", answer: "流傳、散布", distractors: ["移動", "等級", "趨向"] },
+            { id: 118, question: "「流」於形式", answer: "趨向", distractors: ["移動", "派別", "流傳"] },
+            { id: 119, question: "「流」言", answer: "沒有根據的", distractors: ["流傳", "散布", "移動"] },
+
+            // 23. 供
+            { id: 120, question: "「供」給", answer: "給予", distractors: ["案情紀錄", "祭品", "陳述"] },
+            { id: 121, question: "口「供」", answer: "受審者陳說的案情紀錄", distractors: ["給予", "祭品", "供應"] },
+            { id: 122, question: "「供」品", answer: "祭品或供奉的菜餚", distractors: ["給予", "案情紀錄", "陳述"] },
+
+            // 24. 遺
+            { id: 123, question: "「遺」忘", answer: "亡失、丟掉", distractors: ["留下", "剩餘", "贈送"] },
+            { id: 124, question: "不「遺」餘力", answer: "留下", distractors: ["亡失", "剩餘", "贈送"] },
+            { id: 125, question: "暴露無「遺」", answer: "剩餘", distractors: ["亡失", "留下", "贈送"] },
+            { id: 126, question: "路不拾「遺」", answer: "亡失的東西", distractors: ["留下", "剩餘", "贈送"] },
+            { id: 127, question: "「遺」言", answer: "留下的、剩餘未盡的", distractors: ["亡失", "贈送", "丟掉"] },
+            { id: 128, question: "「遺」贈", answer: "贈送、給予", distractors: ["留下", "亡失", "剩餘"] },
+
+            // 25. 落
+            { id: 129, question: "「落」了一地", answer: "凋墜、脫落 (ㄌㄨㄛˋ)", distractors: ["遺漏 (ㄌㄚˋ)", "掉在後面 (ㄌㄠˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 130, question: "花「落」", answer: "凋墜、脫落 (ㄌㄨㄛˋ)", distractors: ["遺漏 (ㄌㄚˋ)", "掉在後面 (ㄌㄠˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 131, question: "「落」葉", answer: "凋墜、脫落 (ㄌㄨㄛˋ)", distractors: ["遺漏 (ㄌㄚˋ)", "掉在後面 (ㄌㄠˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 132, question: "「落」淚", answer: "凋墜、脫落 (ㄌㄨㄛˋ)", distractors: ["遺漏 (ㄌㄚˋ)", "掉在後面 (ㄌㄠˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 133, question: "家道中「落」", answer: "衰敗 (ㄌㄨㄛˋ)", distractors: ["脫落 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 134, question: "衰「落」", answer: "衰敗 (ㄌㄨㄛˋ)", distractors: ["脫落 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 135, question: "下「落」", answer: "停留的地方 (ㄌㄨㄛˋ)", distractors: ["衰敗 (ㄌㄨㄛˋ)", "脫落 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)"] },
+            { id: 136, question: "村「落」", answer: "停留的地方 (ㄌㄨㄛˋ)", distractors: ["衰敗 (ㄌㄨㄛˋ)", "脫落 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)"] },
+            { id: 137, question: "寥「落」", answer: "稀疏、冷清 (ㄌㄨㄛˋ)", distractors: ["衰敗 (ㄌㄨㄛˋ)", "脫落 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)"] },
+            { id: 138, question: "丟三「落」四", answer: "遺漏、忘記 (ㄌㄚˋ)", distractors: ["脫落 (ㄌㄨㄛˋ)", "衰敗 (ㄌㄨㄛˋ)", "停留 (ㄌㄠˋ)"] },
+            { id: 139, question: "「落」在後頭", answer: "掉在後面 (ㄌㄠˋ)", distractors: ["脫落 (ㄌㄨㄛˋ)", "衰敗 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)"] },
+            { id: 140, question: "「落」腳", answer: "停留、停頓 (ㄌㄠˋ)", distractors: ["脫落 (ㄌㄨㄛˋ)", "衰敗 (ㄌㄨㄛˋ)", "遺漏 (ㄌㄚˋ)"] },
+
+            // 26. 緣
+            { id: 141, question: "塵「緣」", answer: "遇合的機會 (ㄩㄢˊ)", distractors: ["沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 142, question: "「緣」分", answer: "遇合的機會 (ㄩㄢˊ)", distractors: ["沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 143, question: "投「緣」", answer: "遇合的機會 (ㄩㄢˊ)", distractors: ["沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 144, question: "無「緣」", answer: "遇合的機會 (ㄩㄢˊ)", distractors: ["沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 145, question: "「緣」溪行", answer: "沿、循 (ㄩㄢˊ)", distractors: ["遇合的機會 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 146, question: "「緣」木求魚", answer: "攀爬 (ㄩㄢˊ)", distractors: ["遇合的機會 (ㄩㄢˊ)", "沿、循 (ㄩㄢˊ)", "因為 (ㄩㄢˊ)"] },
+            { id: 147, question: "只「緣」身在此山中", answer: "因為、由於 (ㄩㄢˊ)", distractors: ["遇合的機會 (ㄩㄢˊ)", "沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)"] },
+            { id: 148, question: "無「緣」無故", answer: "因為、由於 (ㄩㄢˊ)", distractors: ["遇合的機會 (ㄩㄢˊ)", "沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)"] },
+            { id: 149, question: "邊「緣」", answer: "器物的邊沿 (ㄩㄢˊ)", distractors: ["遇合的機會 (ㄩㄢˊ)", "沿、循 (ㄩㄢˊ)", "攀爬 (ㄩㄢˊ)"] },
+
+            // 27. 視
+            { id: 150, question: "無「視」", answer: "看", distractors: ["看待", "考察", "辦理"] },
+            { id: 151, question: "「視」若無睹", answer: "看", distractors: ["看待", "考察", "辦理"] },
+            { id: 152, question: "近「視」", answer: "看", distractors: ["看待", "考察", "辦理"] },
+            { id: 153, question: "善「視」之", answer: "看待、對待", distractors: ["看", "考察", "辦理"] },
+            { id: 154, question: "「視」如己出", answer: "看待、對待", distractors: ["看", "考察", "辦理"] },
+            { id: 155, question: "一「視」同仁", answer: "看待、對待", distractors: ["看", "考察", "辦理"] },
+            { id: 156, question: "巡「視」", answer: "考察、察看", distractors: ["看", "看待", "辦理"] },
+            { id: 157, question: "檢「視」", answer: "考察、察看", distractors: ["看", "看待", "辦理"] },
+            { id: 158, question: "「視」事", answer: "辦理、治理", distractors: ["看", "看待", "考察"] },
+
+            // 28. 長
+            { id: 159, question: "「長」在你必經的路旁", answer: "生長 (ㄓㄤˇ)", distractors: ["主管 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)", "遠 (ㄔㄤˊ)"] },
+            { id: 160, question: "「長」大", answer: "生長 (ㄓㄤˇ)", distractors: ["主管 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)", "遠 (ㄔㄤˊ)"] },
+            { id: 161, question: "尊「長」", answer: "年紀大、輩分高 (ㄓㄤˇ)", distractors: ["主管 (ㄓㄤˇ)", "第一 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 162, question: "師「長」", answer: "年紀大、輩分高 (ㄓㄤˇ)", distractors: ["主管 (ㄓㄤˇ)", "第一 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 163, question: "部「長」", answer: "主管、領導人 (ㄓㄤˇ)", distractors: ["年紀大 (ㄓㄤˇ)", "第一 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 164, question: "校「長」", answer: "主管、領導人 (ㄓㄤˇ)", distractors: ["年紀大 (ㄓㄤˇ)", "第一 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 165, question: "「長」子", answer: "排行第一 (ㄓㄤˇ)", distractors: ["年紀大 (ㄓㄤˇ)", "主管 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 166, question: "他「長」得很俊美", answer: "顯現、生成 (ㄓㄤˇ)", distractors: ["生長 (ㄓㄤˇ)", "年紀大 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 167, question: "「長」他人志氣", answer: "增進、增加 (ㄓㄤˇ)", distractors: ["生長 (ㄓㄤˇ)", "主管 (ㄓㄤˇ)", "優點 (ㄔㄤˊ)"] },
+            { id: 168, question: "各有所「長」", answer: "優點 (ㄔㄤˊ)", distractors: ["專精技能 (ㄔㄤˊ)", "遠 (ㄔㄤˊ)", "生長 (ㄓㄤˇ)"] },
+            { id: 169, question: "特「長」", answer: "優點 (ㄔㄤˊ)", distractors: ["專精技能 (ㄔㄤˊ)", "遠 (ㄔㄤˊ)", "生長 (ㄓㄤˇ)"] },
+            { id: 170, question: "專「長」", answer: "專精的技能 (ㄔㄤˊ)", distractors: ["優點 (ㄔㄤˊ)", "遠 (ㄔㄤˊ)", "生長 (ㄓㄤˇ)"] },
+            { id: 171, question: "萬里「長」征", answer: "遠、空間距離大 (ㄔㄤˊ)", distractors: ["優點 (ㄔㄤˊ)", "專精技能 (ㄔㄤˊ)", "生長 (ㄓㄤˇ)"] },
+            { id: 172, question: "源遠流「長」", answer: "遠、空間距離大 (ㄔㄤˊ)", distractors: ["優點 (ㄔㄤˊ)", "專精技能 (ㄔㄤˊ)", "生長 (ㄓㄤˇ)"] },
+
+            // 29. 聽
+            { id: 173, question: "細「聽」", answer: "收受聲音 (ㄊㄧㄥ)", distractors: ["任由 (ㄊㄧㄥˋ)", "順從 (ㄊㄧㄥˋ)", "治理 (ㄊㄧㄥ)"] },
+            { id: 174, question: "聆「聽」", answer: "收受聲音 (ㄊㄧㄥ)", distractors: ["任由 (ㄊㄧㄥˋ)", "順從 (ㄊㄧㄥˋ)", "治理 (ㄊㄧㄥ)"] },
+            { id: 175, question: "諦「聽」", answer: "收受聲音 (ㄊㄧㄥ)", distractors: ["任由 (ㄊㄧㄥˋ)", "順從 (ㄊㄧㄥˋ)", "治理 (ㄊㄧㄥ)"] },
+            { id: 176, question: "「聽」天由命", answer: "任由、任憑 (ㄊㄧㄥˋ)", distractors: ["收受聲音 (ㄊㄧㄥ)", "治理 (ㄊㄧㄥ)", "察看 (ㄊㄧㄥ)"] },
+            { id: 177, question: "「聽」其自然", answer: "任由、任憑 (ㄊㄧㄥˋ)", distractors: ["收受聲音 (ㄊㄧㄥ)", "治理 (ㄊㄧㄥ)", "察看 (ㄊㄧㄥ)"] },
+            { id: 178, question: "「聽」候差遣", answer: "任由、任憑 (ㄊㄧㄥˋ)", distractors: ["收受聲音 (ㄊㄧㄥ)", "治理 (ㄊㄧㄥ)", "察看 (ㄊㄧㄥ)"] },
+
+            // 30. 塵
+            { id: 179, question: "塵「緣」", answer: "世俗的", distractors: ["飛揚的灰土", "蹤跡", "長久"] },
+            { id: 180, question: "紅「塵」", answer: "世俗的", distractors: ["飛揚的灰土", "蹤跡", "長久"] },
+            { id: 181, question: "「塵」埃", answer: "飛揚的細小灰土", distractors: ["世俗的", "蹤跡", "長久"] },
+            { id: 182, question: "一「塵」不染", answer: "飛揚的細小灰土", distractors: ["世俗的", "蹤跡", "長久"] },
+            { id: 183, question: "步人後「塵」", answer: "蹤跡、事跡", distractors: ["世俗的", "灰土", "長久"] },
+            { id: 184, question: "「塵」封", answer: "長久", distractors: ["世俗的", "灰土", "蹤跡"] },
+
+            // 31. 殷
+            { id: 185, question: "「殷」切", answer: "情意深厚 (ㄧㄣ)", distractors: ["黑紅色 (ㄧㄢ)", "富裕 (ㄧㄣ)", "盛大 (ㄧㄣ)"] },
+            { id: 186, question: "「殷」鑑不遠", answer: "情意深厚 (ㄧㄣ)", distractors: ["黑紅色 (ㄧㄢ)", "富裕 (ㄧㄣ)", "盛大 (ㄧㄣ)"] },
+            { id: 187, question: "「殷」紅", answer: "黑紅色 (ㄧㄢ)", distractors: ["情意深厚 (ㄧㄣ)", "富裕 (ㄧㄣ)", "盛大 (ㄧㄣ)"] },
+
+            // 32. 遇
+            { id: 188, question: "「遇」見", answer: "相逢、不期而會", distractors: ["對待", "機會", "遭受"] },
+            { id: 189, question: "奇「遇」", answer: "相逢、不期而會", distractors: ["對待", "機會", "遭受"] },
+            { id: 190, question: "禮「遇」", answer: "對待", distractors: ["相逢", "機會", "遭受"] },
+            { id: 191, question: "機「遇」", answer: "機會", distractors: ["相逢", "對待", "遭受"] },
+
+            // 33. 盼
+            { id: 192, question: "盼「望」", answer: "希望", distractors: ["看", "等待", "顧"] },
+            { id: 193, question: "期「盼」", answer: "希望", distractors: ["看", "等待", "顧"] },
+            { id: 194, question: "左顧右「盼」", answer: "看", distractors: ["希望", "等待", "顧"] },
+
+            // 34. 美
+            { id: 195, question: "「美」麗", answer: "漂亮、好看", distractors: ["好、善", "誇讚", "得意"] },
+            { id: 196, question: "價廉物「美」", answer: "好、善", distractors: ["漂亮", "誇讚", "得意"] },
+            { id: 197, question: "成人之「美」", answer: "好、善", distractors: ["漂亮", "誇讚", "得意"] },
+            { id: 198, question: "讚「美」", answer: "誇讚、褒獎", distractors: ["漂亮", "好、善", "得意"] },
+
+            // 35. 抖
+            { id: 199, question: "顫「抖」", answer: "顫動", distractors: ["振動", "振奮", "揭穿"] },
+            { id: 200, question: "發「抖」", answer: "顫動", distractors: ["振動", "振奮", "揭穿"] },
+            { id: 201, question: "「抖」落", answer: "振動", distractors: ["顫動", "振奮", "揭穿"] },
+            { id: 202, question: "「抖」擻", answer: "振奮", distractors: ["顫動", "振動", "揭穿"] },
+            { id: 203, question: "「抖」露祕密", answer: "揭穿", distractors: ["顫動", "振動", "振奮"] },
+
+            // 36. 零
+            { id: 204, question: "凋「零」", answer: "降下、落下", distractors: ["零碎", "沒有", "數字"] },
+            { id: 205, question: "「零」錢", answer: "零碎、零散", distractors: ["降下", "沒有", "數字"] },
+            { id: 206, question: "「零」亂", answer: "零碎、零散", distractors: ["降下", "沒有", "數字"] },
+
+            // 37. 辨/辯/辦/瓣
+            { id: 207, question: "明「辨」是非", answer: "分別、判別 (ㄅㄧㄢˋ)", distractors: ["爭論 (ㄅㄧㄢˋ)", "處理 (ㄅㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 208, question: "「辨」別", answer: "分別、判別 (ㄅㄧㄢˋ)", distractors: ["爭論 (ㄅㄧㄢˋ)", "處理 (ㄅㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 209, question: "強「辯」", answer: "爭論是非曲直 (ㄅㄧㄢˋ)", distractors: ["分別 (ㄅㄧㄢˋ)", "處理 (ㄅㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 210, question: "「辯」論", answer: "爭論是非曲直 (ㄅㄧㄢˋ)", distractors: ["分別 (ㄅㄧㄢˋ)", "處理 (ㄅㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 211, question: "「辦」公室", answer: "處理事務 (ㄅㄢˋ)", distractors: ["分別 (ㄅㄧㄢˋ)", "爭論 (ㄅㄧㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 212, question: "「辦」理", answer: "處理事務 (ㄅㄢˋ)", distractors: ["分別 (ㄅㄧㄢˋ)", "爭論 (ㄅㄧㄢˋ)", "花片 (ㄅㄢˋ)"] },
+            { id: 213, question: "花「瓣」", answer: "花片 (ㄅㄢˋ)", distractors: ["處理 (ㄅㄢˋ)", "分別 (ㄅㄧㄢˋ)", "爭論 (ㄅㄧㄢˋ)"] },
+
+            // 38. 慎/鎮/顫/擅/檀/壇/羶/氈
+            { id: 214, question: "「慎」重", answer: "小心、謹慎 (ㄕㄣˋ)", distractors: ["安定 (ㄓㄣˋ)", "顫動 (ㄓㄢˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 215, question: "謹言「慎」行", answer: "小心、謹慎 (ㄕㄣˋ)", distractors: ["安定 (ㄓㄣˋ)", "顫動 (ㄓㄢˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 216, question: "「鎮」定", answer: "安定、壓制 (ㄓㄣˋ)", distractors: ["小心 (ㄕㄣˋ)", "顫動 (ㄓㄢˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 217, question: "「鎮」壓", answer: "安定、壓制 (ㄓㄣˋ)", distractors: ["小心 (ㄕㄣˋ)", "顫動 (ㄓㄢˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 218, question: "「顫」抖", answer: "身體受寒或驚恐而抖動 (ㄓㄢˋ)", distractors: ["小心 (ㄕㄣˋ)", "安定 (ㄓㄣˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 219, question: "「顫」慄", answer: "身體受寒或驚恐而抖動 (ㄓㄢˋ)", distractors: ["小心 (ㄕㄣˋ)", "安定 (ㄓㄣˋ)", "擅長 (ㄕㄢˋ)"] },
+            { id: 220, question: "「擅」長", answer: "精於、善於 (ㄕㄢˋ)", distractors: ["任由己意 (ㄕㄢˋ)", "顫動 (ㄓㄢˋ)", "安定 (ㄓㄣˋ)"] },
+            { id: 221, question: "不「擅」言談", answer: "精於、善於 (ㄕㄢˋ)", distractors: ["任由己意 (ㄕㄢˋ)", "顫動 (ㄓㄢˋ)", "安定 (ㄓㄣˋ)"] },
+            { id: 222, question: "「擅」自", answer: "任由己意私自行事 (ㄕㄢˋ)", distractors: ["精於 (ㄕㄢˋ)", "顫動 (ㄓㄢˋ)", "安定 (ㄓㄣˋ)"] },
+            { id: 223, question: "「檀」香", answer: "植物名 (ㄊㄢˊ)", distractors: ["祭祀高臺 (ㄊㄢˊ)", "臊味 (ㄕㄢ)", "毛織物 (ㄓㄢ)"] },
+            { id: 224, question: "天「壇」", answer: "祭祀高臺或團體總稱 (ㄊㄢˊ)", distractors: ["植物名 (ㄊㄢˊ)", "臊味 (ㄕㄢ)", "毛織物 (ㄓㄢ)"] },
+            { id: 225, question: "文「壇」", answer: "祭祀高臺或團體總稱 (ㄊㄢˊ)", distractors: ["植物名 (ㄊㄢˊ)", "臊味 (ㄕㄢ)", "毛織物 (ㄓㄢ)"] },
+            { id: 226, question: "腥「羶」", answer: "羊身上的臊味 (ㄕㄢ)", distractors: ["植物名 (ㄊㄢˊ)", "祭祀高臺 (ㄊㄢˊ)", "毛織物 (ㄓㄢ)"] },
+            { id: 227, question: "如坐針「氈」", answer: "毛織物 (ㄓㄢ)", distractors: ["植物名 (ㄊㄢˊ)", "祭祀高臺 (ㄊㄢˊ)", "臊味 (ㄕㄢ)"] },
+
+            // 39. 頓
+            { id: 228, question: "捶胸「頓」足", answer: "以頭或足叩地 (ㄉㄨㄣˋ)", distractors: ["立刻 (ㄉㄨㄣˋ)", "暫停 (ㄉㄨㄣˋ)", "安置 (ㄉㄨㄣˋ)"] },
+            { id: 229, question: "茅塞「頓」開", answer: "立刻、突然 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "暫停 (ㄉㄨㄣˋ)", "安置 (ㄉㄨㄣˋ)"] },
+            { id: 230, question: "停「頓」", answer: "暫停、停留 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "立刻 (ㄉㄨㄣˋ)", "安置 (ㄉㄨㄣˋ)"] },
+            { id: 231, question: "安「頓」", answer: "安置、放置 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "立刻 (ㄉㄨㄣˋ)", "疲倦 (ㄉㄨㄣˋ)"] },
+            { id: 232, question: "整「頓」", answer: "整治 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "立刻 (ㄉㄨㄣˋ)", "疲倦 (ㄉㄨㄣˋ)"] },
+            { id: 233, question: "困「頓」", answer: "疲倦 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "立刻 (ㄉㄨㄣˋ)", "安置 (ㄉㄨㄣˋ)"] },
+            { id: 234, question: "吃一「頓」飯", answer: "量詞 (ㄉㄨㄣˋ)", distractors: ["叩地 (ㄉㄨㄣˋ)", "立刻 (ㄉㄨㄣˋ)", "暫停 (ㄉㄨㄣˋ)"] },
+
+            // 40. 搗
+            { id: 235, question: "「搗」蛋", answer: "擾亂、攪亂", distractors: ["撞擊", "攻擊", "捶打"] },
+            { id: 236, question: "「搗」藥", answer: "撞擊", distractors: ["擾亂", "攻擊", "捶打"] },
+            { id: 237, question: "直「搗」黃龍", answer: "攻擊、攻打", distractors: ["擾亂", "撞擊", "捶打"] },
+            { id: 238, question: "「搗」衣", answer: "捶打", distractors: ["擾亂", "撞擊", "攻擊"] },
+
+            // 41. 幅
+            { id: 239, question: "兩「幅」大畫", answer: "量詞 (單位)", distractors: ["寬度", "文章分量", "邊緣"] },
+            { id: 240, question: "「幅」員廣闊", answer: "泛指寬度", distractors: ["量詞", "文章分量", "邊緣"] },
+            { id: 241, question: "篇「幅」", answer: "文章或書畫的分量", distractors: ["量詞", "寬度", "邊緣"] },
+            { id: 242, question: "不修邊「幅」", answer: "布帛、衣服的邊緣", distractors: ["量詞", "寬度", "分量"] },
+
+            // 42. 分
+            { id: 243, question: "天「分」", answer: "天賦、天資 (ㄈㄣˋ)", distractors: ["情誼 (ㄈㄣˋ)", "分擔 (ㄈㄣ)", "辨別 (ㄈㄣ)"] },
+            { id: 244, question: "緣「分」", answer: "情誼、關係 (ㄈㄣˋ)", distractors: ["天賦 (ㄈㄣˋ)", "分擔 (ㄈㄣ)", "辨別 (ㄈㄣ)"] },
+            { id: 245, question: "「分」憂解勞", answer: "分擔 (ㄈㄣ)", distractors: ["天賦 (ㄈㄣˋ)", "辨別 (ㄈㄣ)", "分開 (ㄈㄣ)"] },
+            { id: 246, question: "五穀不「分」", answer: "辨別 (ㄈㄣ)", distractors: ["天賦 (ㄈㄣˋ)", "分擔 (ㄈㄣ)", "分開 (ㄈㄣ)"] },
+            { id: 247, question: "是非「分」明", answer: "清楚的、明白的 (ㄈㄣ)", distractors: ["天賦 (ㄈㄣˋ)", "分擔 (ㄈㄣ)", "分開 (ㄈㄣ)"] },
+            { id: 248, question: "三「分」天下", answer: "分開 (ㄈㄣ)", distractors: ["天賦 (ㄈㄣˋ)", "分擔 (ㄈㄣ)", "辨別 (ㄈㄣ)"] },
+
+            // 43. 露
+            { id: 249, question: "原形畢「露」", answer: "顯現、表現 (ㄌㄡˋ)", distractors: ["洩漏 (ㄌㄡˋ)", "水珠 (ㄌㄨˋ)", "遮掩 (ㄌㄡˋ)"] },
+            { id: 250, question: "「露」出", answer: "顯現、表現 (ㄌㄡˋ)", distractors: ["洩漏 (ㄌㄡˋ)", "水珠 (ㄌㄨˋ)", "遮掩 (ㄌㄡˋ)"] },
+            { id: 251, question: "「露」了口風", answer: "洩漏 (ㄌㄡˋ)", distractors: ["顯現 (ㄌㄡˋ)", "水珠 (ㄌㄨˋ)", "表現 (ㄌㄡˋ)"] },
+            { id: 252, question: "玫瑰「露」", answer: "水珠、液體 (ㄌㄨˋ)", distractors: ["顯現 (ㄌㄡˋ)", "洩漏 (ㄌㄡˋ)", "表現 (ㄌㄡˋ)"] },
+            { id: 253, question: "「露」水", answer: "水珠、液體 (ㄌㄨˋ)", distractors: ["顯現 (ㄌㄡˋ)", "洩漏 (ㄌㄡˋ)", "表現 (ㄌㄡˋ)"] },
+
+            // 44. 藏
+            { id: 254, question: "躲「藏」", answer: "隱匿 (ㄘㄤˊ)", distractors: ["儲存 (ㄘㄤˊ)", "儲存處 (ㄗㄤˋ)", "邊疆民族 (ㄗㄤˋ)"] },
+            { id: 255, question: "儲「藏」室", answer: "儲存 (ㄘㄤˊ)", distractors: ["隱匿 (ㄘㄤˊ)", "儲存處 (ㄗㄤˋ)", "邊疆民族 (ㄗㄤˋ)"] },
+            { id: 256, question: "寶「藏」", answer: "儲存東西的地方 (ㄗㄤˋ)", distractors: ["隱匿 (ㄘㄤˊ)", "儲存 (ㄘㄤˊ)", "邊疆民族 (ㄗㄤˋ)"] },
+            { id: 257, question: "「藏」族", answer: "邊疆民族 (ㄗㄤˋ)", distractors: ["隱匿 (ㄘㄤˊ)", "儲存 (ㄘㄤˊ)", "儲存處 (ㄗㄤˋ)"] },
+
+            // 45. 凌
+            { id: 258, question: "盛氣「凌」人", answer: "欺侮、侵犯", distractors: ["登", "接近", "雜亂"] },
+            { id: 259, question: "「凌」辱", answer: "欺侮、侵犯", distractors: ["登", "接近", "雜亂"] },
+            { id: 260, question: "壯志「凌」雲", answer: "登、升", distractors: ["欺侮", "接近", "雜亂"] },
+            { id: 261, question: "「凌」晨", answer: "接近", distractors: ["欺侮", "登", "雜亂"] },
+            { id: 262, question: "「凌」亂不堪", answer: "雜亂", distractors: ["欺侮", "登", "接近"] },
+
+            // 46. 宣
+            { id: 263, question: "心照不「宣」", answer: "表達、說明", distractors: ["散播", "發散", "傳召"] },
+            { id: 264, question: "「宣」傳", answer: "散播、發揚", distractors: ["表達", "發散", "傳召"] },
+            { id: 265, question: "「宣」揚", answer: "散播、發揚", distractors: ["表達", "發散", "傳召"] },
+            { id: 266, question: "「宣」洩怨氣", answer: "發散、疏通", distractors: ["表達", "散播", "傳召"] },
+            { id: 267, question: "「宣」見", answer: "以君王命令傳召", distractors: ["表達", "散播", "發散"] },
+
+            // 47. 渾
+            { id: 268, question: "「渾」然不覺", answer: "完全、簡直", distractors: ["全部", "混雜", "混濁"] },
+            { id: 269, question: "「渾」身解數", answer: "全部、整個", distractors: ["完全", "混雜", "混濁"] },
+            { id: 270, question: "「渾」水摸魚", answer: "混雜 (同「混」)", distractors: ["完全", "全部", "混濁"] },
+            { id: 271, question: "「渾」濁", answer: "混濁、汙濁", distractors: ["完全", "全部", "混雜"] },
+
+            // 48. 更
+            { id: 272, question: "三「更」半夜", answer: "計時單位 (ㄍㄥ)", distractors: ["調換 (ㄍㄥ)", "愈甚 (ㄍㄥˋ)", "再 (ㄍㄥˋ)"] },
+            { id: 273, question: "改弦「更」張", answer: "調換、交替 (ㄍㄥ)", distractors: ["計時 (ㄍㄥ)", "愈甚 (ㄍㄥˋ)", "再 (ㄍㄥˋ)"] },
+            { id: 274, question: "「更」迭", answer: "調換、交替 (ㄍㄥ)", distractors: ["計時 (ㄍㄥ)", "愈甚 (ㄍㄥˋ)", "再 (ㄍㄥˋ)"] },
+            { id: 275, question: "「更」勝一籌", answer: "愈甚、越發 (ㄍㄥˋ)", distractors: ["計時 (ㄍㄥ)", "調換 (ㄍㄥ)", "再 (ㄍㄥˋ)"] },
+            { id: 276, question: "「更」上一層樓", answer: "再、復 (ㄍㄥˋ)", distractors: ["計時 (ㄍㄥ)", "調換 (ㄍㄥ)", "愈甚 (ㄍㄥˋ)"] },
+
+            // 49. 赫
+            { id: 277, question: "「赫」然", answer: "吃驚的樣子 (ㄏㄜˋ)", distractors: ["顯耀 (ㄏㄜˋ)", "害怕 (ㄒㄧㄚˋ)", "恐嚇 (ㄏㄜˋ)"] },
+            { id: 278, question: "「赫」赫有名", answer: "顯耀、盛大 (ㄏㄜˋ)", distractors: ["吃驚 (ㄏㄜˋ)", "害怕 (ㄒㄧㄚˋ)", "恐嚇 (ㄏㄜˋ)"] },
+
+            // 50. 嚇
+            { id: 279, question: "「嚇」唬", answer: "害怕、使人害怕 (ㄒㄧㄚˋ)", distractors: ["恐嚇 (ㄏㄜˋ)", "吃驚 (ㄏㄜˋ)", "顯耀 (ㄏㄜˋ)"] },
+            { id: 280, question: "驚「嚇」", answer: "害怕、使人害怕 (ㄒㄧㄚˋ)", distractors: ["恐嚇 (ㄏㄜˋ)", "吃驚 (ㄏㄜˋ)", "顯耀 (ㄏㄜˋ)"] },
+            { id: 281, question: "恐「嚇」", answer: "言語怒叱、武力逼迫 (ㄏㄜˋ)", distractors: ["害怕 (ㄒㄧㄚˋ)", "吃驚 (ㄏㄜˋ)", "顯耀 (ㄏㄜˋ)"] },
+            { id: 282, question: "恫「嚇」", answer: "言語怒叱、武力逼迫 (ㄏㄜˋ)", distractors: ["害怕 (ㄒㄧㄚˋ)", "吃驚 (ㄏㄜˋ)", "顯耀 (ㄏㄜˋ)"] },
+
+            // 51. 削
+            { id: 283, question: "「削」木頭", answer: "刮除表層", distractors: ["分割", "刪除", "搜刮"] },
+            { id: 284, question: "「削」地", answer: "分割", distractors: ["刮除", "刪除", "搜刮"] },
+            { id: 285, question: "「削」職", answer: "刪除、革除", distractors: ["刮除", "分割", "搜刮"] },
+            { id: 286, question: "剝「削」", answer: "搜刮", distractors: ["刮除", "分割", "刪除"] },
+            { id: 287, question: "「削」弱", answer: "減弱", distractors: ["刮除", "分割", "刪除"] },
+            { id: 288, question: "「削」了一頓", answer: "責怪", distractors: ["刮除", "分割", "刪除"] },
+
+            // 52. 逮
+            { id: 289, question: "「逮」捕", answer: "捉、捉拿", distractors: ["及", "趕上", "達到"] },
+            { id: 290, question: "力有未「逮」", answer: "及、趕上、達到", distractors: ["捉拿", "逮捕", "捕捉"] },
+
+            // 53. 綻
+            { id: 291, question: "「綻」放", answer: "開放", distractors: ["破裂", "脫線", "飽滿"] },
+            { id: 292, question: "皮開肉「綻」", answer: "破裂、裂開", distractors: ["開放", "脫線", "飽滿"] },
+            { id: 293, question: "「綻」線", answer: "衣服脫線", distractors: ["開放", "破裂", "飽滿"] },
+            { id: 294, question: "飽「綻」", answer: "飽滿", distractors: ["開放", "破裂", "脫線"] },
+
+            // 54. 撓
+            { id: 295, question: "不屈不「撓」", answer: "屈服、屈曲", distractors: ["攪擾", "抓", "搔"] },
+            { id: 296, question: "阻「撓」", answer: "攪擾、阻擾", distractors: ["屈服", "抓", "搔"] },
+            { id: 297, question: "抓耳「撓」腮", answer: "抓、搔", distractors: ["屈服", "攪擾", "彎曲"] },
+
+            // 55. 秉
+            { id: 298, question: "「秉」持", answer: "保持、堅持", distractors: ["根據", "執握", "憑藉"] },
+            { id: 299, question: "「秉」公處理", answer: "根據、依循", distractors: ["保持", "執握", "堅持"] },
+            { id: 300, question: "「秉」燭", answer: "用手執握", distractors: ["保持", "根據", "堅持"] },
+
+            // 56. 想
+            { id: 301, question: "夢「想」", answer: "念頭、意念", distractors: ["思念", "推測", "思索"] },
+            { id: 302, question: "「想」念", answer: "思念、懷念", distractors: ["念頭", "推測", "思索"] },
+            { id: 303, question: "猜「想」", answer: "推測、猜度", distractors: ["念頭", "思念", "思索"] },
+            { id: 304, question: "「想」辦法", answer: "思索、思考", distractors: ["念頭", "思念", "推測"] },
+
+            // 57. 顯露 (露 repeated for specific definitions)
+            { id: 305, question: "顯「露」", answer: "表現、顯現", distractors: ["洩漏", "水珠", "遮掩"] },
+            { id: 306, question: "「露」口風", answer: "洩漏", distractors: ["顯現", "水珠", "表現"] },
+
+            // 58. 遭
+            { id: 307, question: "「遭」殃", answer: "遇、逢、受", distractors: ["周圍", "量詞", "遭受"] },
+            { id: 308, question: "周「遭」", answer: "周圍", distractors: ["遇", "量詞", "遭受"] },
+            { id: 309, question: "頭一「遭」", answer: "量詞 (回、次)", distractors: ["遇", "周圍", "遭受"] },
+
+            // 59. 繹
+            { id: 310, question: "絡「繹」", answer: "前後相連，繼續不斷", distractors: ["理出頭緒", "推究", "翻譯"] },
+            { id: 311, question: "尋「繹」", answer: "理出頭緒，推究事理", distractors: ["前後相連", "繼續不斷", "翻譯"] },
+            { id: 312, question: "演「繹」", answer: "理出頭緒，推究事理", distractors: ["前後相連", "繼續不斷", "翻譯"] },
+
+            // 60. 造
+            { id: 313, question: "「造」就", answer: "栽培、培養", distractors: ["建設", "虛構", "給予生命"] },
+            { id: 314, question: "建「造」", answer: "建設、建築", distractors: ["栽培", "虛構", "給予生命"] },
+            { id: 315, question: "捏「造」", answer: "虛構", distractors: ["栽培", "建設", "給予生命"] },
+            { id: 316, question: "再「造」之恩", answer: "給予生命", distractors: ["栽培", "建設", "虛構"] },
+
+            // 61. 曉
+            { id: 317, question: "破「曉」", answer: "天剛亮的時刻", distractors: ["清晨", "明白", "告知"] },
+            { id: 318, question: "「曉」霧", answer: "清晨的", distractors: ["天亮", "明白", "告知"] },
+            { id: 319, question: "知「曉」", answer: "知道、明白", distractors: ["天亮", "清晨", "告知"] },
+            { id: 320, question: "「曉」以利害", answer: "告知", distractors: ["天亮", "清晨", "明白"] },
+
+            // 62. 饒
+            { id: 321, question: "「饒」恕", answer: "寬恕、赦免", distractors: ["豐厚", "富足", "求饒"] },
+            { id: 322, question: "富「饒」", answer: "豐厚、富足", distractors: ["寬恕", "赦免", "求饒"] },
+
+            // 63. 澤
+            { id: 323, question: "沼「澤」", answer: "水流匯聚的地方", distractors: ["恩惠", "光彩", "滋潤"] },
+            { id: 324, question: "恩「澤」", answer: "恩惠", distractors: ["沼澤", "水流匯聚處", "光彩"] },
+
+            // 64. 驛
+            { id: 325, question: "「驛」站", answer: "古代供換馬、休息處", distractors: ["賞賜酒食", "傳送公文", "郵局"] },
+            { id: 326, question: "「驛」酒", answer: "賞賜酒食", distractors: ["驛站", "休息處", "傳送公文"] }
+        ];
+
+        // --- Helper Functions ---
+        
+        const shuffleArray = (array) => {
+          const newArray = [...array];
+          for (let i = newArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+          }
+          return newArray;
+        };
+
+        const playSound = (type) => {
+            const audioPath = type === 'success' ? 'sounds/correct.mp3' : 'sounds/fail.mp3';
+            const audio = new Audio(audioPath);
+            audio.play().catch(err => console.log('Audio play error (expected if files missing):', err));
+        }
+
+        const App = () => {
+          const [mode, setMode] = useState('menu'); // menu, study, quiz, favorites, mistakes
+          const [currentUser, setCurrentUser] = useState(null);
+          const [users, setUsers] = useState([]);
+          const [favorites, setFavorites] = useState(new Set());
+          const [mistakes, setMistakes] = useState(new Set());
+
+          // Load users on mount
+          useEffect(() => {
+            try {
+                const storedUsers = JSON.parse(localStorage.getItem(KEY_USERS)) || [];
+                setUsers(storedUsers);
+            } catch (e) {
+                console.error("Error loading users", e);
+            }
+          }, []);
+
+          // Load user data when currentUser changes
+          useEffect(() => {
+            if (currentUser) {
+                try {
+                    // Load Favorites
+                    const favs = JSON.parse(localStorage.getItem(getKeyFavorites(currentUser))) || [];
+                    setFavorites(new Set(favs));
+
+                    // Load Mistakes
+                    const mists = JSON.parse(localStorage.getItem(getKeyMistakes(currentUser))) || [];
+                    setMistakes(new Set(mists));
+                } catch (e) {
+                    console.error("Error loading user data", e);
+                }
+            } else {
+                setFavorites(new Set());
+                setMistakes(new Set());
+            }
+          }, [currentUser]);
+
+          const handleLogin = (name) => {
+            if (!name.trim()) return;
+            const newUsers = Array.from(new Set([name, ...users])); // Add to front, unique
+            setUsers(newUsers);
+            localStorage.setItem(KEY_USERS, JSON.stringify(newUsers));
+            setCurrentUser(name);
+            setMode('menu'); // Ensure we are on menu after login
+          };
+
+          const handleLogout = () => {
+            setCurrentUser(null);
+            setMode('menu');
+          };
+
+          const toggleFavorite = useCallback((id) => {
+            if (!currentUser) return;
+            
+            const newFavorites = new Set(favorites);
+            if (newFavorites.has(id)) {
+                newFavorites.delete(id);
+            } else {
+                newFavorites.add(id);
+            }
+            
+            setFavorites(newFavorites);
+            localStorage.setItem(getKeyFavorites(currentUser), JSON.stringify([...newFavorites]));
+          }, [favorites, currentUser]);
+
+          const addMistake = useCallback((id) => {
+            if (!currentUser) return;
+            
+            const newMistakes = new Set(mistakes);
+            if (!newMistakes.has(id)) {
+                newMistakes.add(id);
+                setMistakes(newMistakes);
+                localStorage.setItem(getKeyMistakes(currentUser), JSON.stringify([...newMistakes]));
+            }
+          }, [mistakes, currentUser]);
+
+          // If no user is logged in, show Login Screen
+          if (!currentUser) {
+            return <LoginView users={users} onLogin={handleLogin} />;
+          }
+          
+          return (
+            <div className="min-h-screen bg-orange-50 text-stone-800 font-sans">
+              {/* Header */}
+              <header className="bg-orange-600 text-white p-4 shadow-lg sticky top-0 z-20">
+                <div className="max-w-4xl mx-auto flex justify-between items-center">
+                  <div 
+                    className="flex items-center space-x-2 cursor-pointer"
+                    onClick={() => setMode('menu')}
+                  >
+                    <BookOpen size={28} />
+                    <h1 className="text-xl md:text-2xl font-bold tracking-wider">字義辨正學習App</h1>
+                  </div>
+                  
+                  <div className="flex items-center space-x-4">
+                    <div className="hidden md:flex items-center bg-orange-700 px-3 py-1 rounded-full text-sm">
+                        <User size={16} className="mr-2"/>
+                        <span className="font-bold truncate max-w-[100px]">{currentUser}</span>
+                    </div>
+                    {mode !== 'menu' && (
+                        <button 
+                        onClick={() => setMode('menu')}
+                        className="text-orange-100 hover:text-white transition font-medium"
+                        >
+                        回首頁
+                        </button>
+                    )}
+                    <button 
+                        onClick={handleLogout}
+                        className="flex items-center text-orange-200 hover:text-white transition"
+                        title="登出"
+                    >
+                        <LogOut size={20} />
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              {/* Main Content */}
+              <main className="max-w-4xl mx-auto p-4 md:p-6">
+                {mode === 'menu' && (
+                  <div className="flex flex-col items-center justify-center space-y-8 py-12 animate-in fade-in duration-500">
+                    <div className="text-center space-y-4">
+                      <div className="bg-orange-100 p-4 rounded-full inline-block mb-2">
+                        <Brain size={48} className="text-orange-600" />
+                      </div>
+                      <h2 className="text-3xl font-bold text-orange-900">歡迎回來，{currentUser}</h2>
+                      <p className="text-stone-600 text-lg max-w-md">
+                        精準掌握字詞釋義與讀音<br/>
+                        共有 {rawData.length} 道精選題目
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                      <button 
+                        onClick={() => setMode('study')}
+                        className="flex flex-col items-center p-8 bg-white rounded-2xl shadow-sm hover:shadow-xl hover:bg-orange-50 transition border-2 border-orange-100 hover:border-orange-300 group"
+                      >
+                        <div className="bg-orange-100 p-4 rounded-full mb-4 group-hover:scale-110 transition">
+                          <List size={40} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-orange-900">全表瀏覽</h3>
+                        <p className="text-stone-500 mt-2">完整檢視字義對照表</p>
+                      </button>
+
+                      <button 
+                        onClick={() => setMode('quiz')}
+                        className="flex flex-col items-center p-8 bg-white rounded-2xl shadow-sm hover:shadow-xl hover:bg-orange-50 transition border-2 border-orange-100 hover:border-orange-300 group"
+                      >
+                        <div className="bg-orange-100 p-4 rounded-full mb-4 group-hover:scale-110 transition">
+                          <Zap size={40} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-orange-900">閃電刷題</h3>
+                        <p className="text-stone-500 mt-2">快速挑戰字詞釋義</p>
+                      </button>
+
+                      <button 
+                        onClick={() => setMode('favorites')}
+                        className="flex flex-col items-center p-8 bg-white rounded-2xl shadow-sm hover:shadow-xl hover:bg-orange-50 transition border-2 border-orange-100 hover:border-orange-300 group"
+                      >
+                        <div className="bg-red-50 p-4 rounded-full mb-4 group-hover:scale-110 transition">
+                          <Heart size={40} className="text-red-500 fill-red-500" />
+                        </div>
+                        <h3 className="text-xl font-bold text-orange-900">我的最愛</h3>
+                        <p className="text-stone-500 mt-2">複習重點收藏題目</p>
+                      </button>
+
+                      <button 
+                        onClick={() => setMode('mistakes')}
+                        className="flex flex-col items-center p-8 bg-white rounded-2xl shadow-sm hover:shadow-xl hover:bg-orange-50 transition border-2 border-orange-100 hover:border-orange-300 group"
+                      >
+                        <div className="bg-stone-100 p-4 rounded-full mb-4 group-hover:scale-110 transition">
+                          <BookX size={40} className="text-stone-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-orange-900">錯題複習</h3>
+                        <p className="text-stone-500 mt-2">針對答錯題目加強練習</p>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {mode === 'study' && (
+                    <TableView 
+                        data={rawData} 
+                        favorites={favorites} 
+                        onToggleFavorite={toggleFavorite} 
+                        title="字義辨正一覽表"
+                    />
+                )}
+                
+                {mode === 'favorites' && (
+                    <TableView 
+                        data={rawData.filter(item => favorites.has(item.id))} 
+                        favorites={favorites} 
+                        onToggleFavorite={toggleFavorite} 
+                        title="我的最愛清單"
+                        emptyMessage="您還沒有加入任何最愛題目喔！"
+                    />
+                )}
+
+                {mode === 'mistakes' && (
+                    <TableView 
+                        data={rawData.filter(item => mistakes.has(item.id))} 
+                        favorites={favorites} 
+                        onToggleFavorite={toggleFavorite} 
+                        title="錯題複習本"
+                        emptyMessage="太棒了！目前沒有錯題紀錄。"
+                    />
+                )}
+
+                {mode === 'quiz' && (
+                    <WaterfallQuizView 
+                        data={rawData} 
+                        currentUser={currentUser} 
+                        favorites={favorites}
+                        onToggleFavorite={toggleFavorite}
+                        onAddMistake={addMistake}
+                        onExit={() => setMode('menu')} 
+                    />
+                )}
+              </main>
+            </div>
+          );
+        };
+
+        // --- Login View Component ---
+        const LoginView = ({ users, onLogin }) => {
+            const [inputName, setInputName] = useState("");
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if(inputName.trim()) onLogin(inputName.trim());
+            }
+
+            return (
+                <div className="min-h-screen bg-orange-50 flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border-2 border-orange-100">
+                        <div className="text-center mb-8">
+                            <div className="bg-orange-100 p-3 rounded-full inline-block mb-4">
+                                <BookOpen size={40} className="text-orange-600" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-orange-900">字義辨正學習App</h1>
+                            <p className="text-stone-500 mt-2">請輸入姓名以開始學習</p>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <input 
+                                    type="text" 
+                                    value={inputName}
+                                    onChange={(e) => setInputName(e.target.value)}
+                                    placeholder="輸入您的名字"
+                                    className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-lg"
+                                    autoFocus
+                                />
+                            </div>
+                            <button 
+                                type="submit" 
+                                disabled={!inputName.trim()}
+                                className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-lg transition disabled:opacity-50"
+                            >
+                                開始使用
+                            </button>
+                        </form>
+
+                        {users.length > 0 && (
+                            <div className="mt-8">
+                                <div className="relative mb-4">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-stone-200"></div>
+                                    </div>
+                                    <div className="relative flex justify-center text-sm">
+                                        <span className="px-2 bg-white text-stone-500">快速登入</span>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                    {users.map((user, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => onLogin(user)}
+                                            className="px-4 py-2 bg-stone-100 hover:bg-orange-100 text-stone-700 hover:text-orange-700 rounded-full text-sm font-medium transition"
+                                        >
+                                            {user}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Table View Component ---
+        const TableView = ({ data, favorites, onToggleFavorite, title, emptyMessage = "沒有找到符合的資料" }) => {
+          const [searchTerm, setSearchTerm] = useState("");
+
+          const filteredData = data.filter(item => 
+            item.question.includes(searchTerm) || 
+            item.answer.includes(searchTerm) ||
+            item.id.toString().includes(searchTerm)
+          );
+
+          return (
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-orange-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="p-4 border-b border-orange-100 bg-orange-50 flex flex-col md:flex-row justify-between items-center gap-4">
+                <h2 className="text-xl font-bold text-orange-900 flex items-center">
+                  <List className="mr-2" size={24} />
+                  {title}
+                </h2>
+                <input 
+                  type="text" 
+                  placeholder="搜尋題目或解答..." 
+                  className="px-4 py-2 rounded-lg border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 w-full md:w-64 bg-white"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              
+              <div className="overflow-x-auto max-h-[70vh]">
+                <table className="w-full text-left">
+                  <thead className="bg-orange-100 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="p-4 font-black text-orange-900 border-b-2 border-orange-200 w-16 text-center">收藏</th>
+                      <th className="p-4 font-black text-orange-900 border-b-2 border-orange-200 w-24">編號</th>
+                      <th className="p-4 font-black text-orange-900 border-b-2 border-orange-200 w-1/3">詞語應用</th>
+                      <th className="p-4 font-black text-orange-900 border-b-2 border-orange-200">正確釋義 / 讀音</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50">
+                    {filteredData.length > 0 ? filteredData.map((item) => {
+                      const isFav = favorites.has(item.id);
+                      return (
+                        <tr key={item.id} className="hover:bg-orange-50 transition-colors group">
+                          <td className="p-4 text-center">
+                            <button 
+                                onClick={() => onToggleFavorite(item.id)}
+                                className={`transition transform active:scale-90 p-1 rounded-full hover:bg-orange-100 ${isFav ? 'text-red-500' : 'text-stone-300 hover:text-red-400'}`}
+                            >
+                                <Heart size={20} className={isFav ? "fill-current heart-click" : ""} />
+                            </button>
+                          </td>
+                          <td className="p-4 text-stone-500 font-mono font-medium">{item.id}</td>
+                          <td className="p-4 text-stone-800 text-lg font-medium">{item.question}</td>
+                          <td className="p-4 text-orange-700 text-lg font-bold">{item.answer}</td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan="4" className="p-12 text-center text-stone-400 flex flex-col items-center justify-center">
+                            <div className="mb-2 bg-stone-100 p-4 rounded-full">
+                                <List size={32} />
+                            </div>
+                            <p>{emptyMessage}</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-3 bg-orange-50 border-t border-orange-200 text-center text-sm text-stone-500">
+                顯示 {filteredData.length} 筆資料
+              </div>
+            </div>
+          );
+        };
+
+        // --- Waterfall Quiz View Component ---
+        const WaterfallQuizView = ({ data, currentUser, favorites, onToggleFavorite, onAddMistake, onExit }) => {
+          // Store the generated quiz data (options shuffled once)
+          const [quizData, setQuizData] = useState([]);
+          // Store user selections: { questionId: selectedOption }
+          const [selections, setSelections] = useState({});
+          
+          const userProgressKey = getKeyProgress(currentUser);
+
+          // Initialize quiz data with options on mount
+          useEffect(() => {
+            const preparedData = data.map(item => {
+              // Combine answer and explicit distractors, then shuffle
+              const options = shuffleArray([item.answer, ...item.distractors]);
+              return { ...item, options };
+            });
+            setQuizData(preparedData);
+
+            // Load saved progress
+            try {
+                const savedProgress = localStorage.getItem(userProgressKey);
+                if (savedProgress) {
+                    setSelections(JSON.parse(savedProgress));
+                }
+            } catch (e) {
+                console.error("Failed to load progress", e);
+            }
+          }, [data, userProgressKey]);
+
+          const handleSelect = (questionId, option) => {
+            const newSelections = {
+              ...selections,
+              [questionId]: option
+            };
+            setSelections(newSelections);
+            // Save immediately
+            localStorage.setItem(userProgressKey, JSON.stringify(newSelections));
+
+            // Sound and Confetti
+            const currentQuestion = data.find(item => item.id === questionId);
+            const isCorrect = option === currentQuestion.answer;
+
+            if (isCorrect) {
+                playSound('success');
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            } else {
+                playSound('error');
+                // Record mistake
+                onAddMistake(questionId);
+            }
+          };
+          
+          const completedCount = Object.keys(selections).length;
+          const progress = Math.round((completedCount / data.length) * 100);
+
+          return (
+            <div className="max-w-4xl mx-auto pb-20">
+              {/* Sticky Progress Header */}
+              <div className="sticky top-16 z-10 bg-orange-50/95 backdrop-blur-sm pt-4 pb-2 border-b border-orange-200 mb-6 shadow-sm">
+                 <div className="flex justify-between items-center mb-2 px-2">
+                    <div>
+                        <h2 className="text-xl font-bold text-orange-900 flex items-center gap-2">
+                            <Zap size={24} className="fill-orange-500 text-orange-600"/>
+                            閃電刷題
+                        </h2>
+                        <p className="text-xs text-stone-500 mt-1">作答者: {currentUser} | 已完成: {completedCount} / {data.length} 題</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => {
+                                if(window.confirm('確定要重新開始嗎？您將遺失目前的作答紀錄。')) {
+                                    if(window.confirm('再次確認：真的要清空所有進度重來嗎？(此動作無法復原)')) {
+                                        setSelections({});
+                                        localStorage.removeItem(userProgressKey);
+                                        window.scrollTo(0,0);
+                                    }
+                                }
+                            }}
+                            className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 font-medium text-xs sm:text-sm transition"
+                        >
+                            重置進度
+                        </button>
+                        <button 
+                            onClick={onExit}
+                            className="px-3 py-1.5 bg-stone-600 text-white rounded-lg hover:bg-stone-700 font-medium text-xs sm:text-sm transition"
+                        >
+                            暫停離開
+                        </button>
+                    </div>
+                 </div>
+                 {/* Progress Bar */}
+                 <div className="w-full bg-orange-200 h-2.5 rounded-full overflow-hidden">
+                    <div 
+                        className="bg-orange-600 h-2.5 rounded-full progress-bar shadow-[0_0_10px_rgba(249,115,22,0.5)]" 
+                        style={{ width: `${progress}%` }}
+                    ></div>
+                 </div>
+              </div>
+
+              {/* Waterfall List */}
+              <div className="space-y-6">
+                {quizData.map((item) => {
+                    const userSelection = selections[item.id];
+                    const isAnswered = userSelection !== undefined;
+                    const isCorrect = userSelection === item.answer;
+                    const isFav = favorites.has(item.id);
+
+                    return (
+                        <div key={item.id} className={`bg-white rounded-xl shadow-sm border-2 transition-all duration-300 overflow-hidden ${isAnswered ? (isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50') : 'border-orange-100'}`}>
+                            {/* Question Header */}
+                            <div className="p-4 border-b border-black/5 flex items-start gap-3">
+                                <span className="bg-orange-100 text-orange-800 font-mono font-bold px-2 py-1 rounded text-sm shrink-0 mt-1">
+                                    #{item.id}
+                                </span>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleFavorite(item.id);
+                                            }}
+                                            className={`transition transform active:scale-90 p-1 rounded-full -ml-2 ${isFav ? 'text-red-500' : 'text-stone-300 hover:text-red-400'}`}
+                                            title={isFav ? "取消收藏" : "加入最愛"}
+                                        >
+                                            <Heart size={20} className={isFav ? "fill-current heart-click" : ""} />
+                                        </button>
+                                        <h3 className="text-xl md:text-2xl font-bold text-stone-800 leading-snug">
+                                            {item.question}
+                                        </h3>
+                                    </div>
+                                </div>
+                                {isAnswered && (
+                                    <div className="ml-auto shrink-0">
+                                        {isCorrect ? <CheckCircle className="text-green-500" /> : <XCircle className="text-red-500" />}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Options Row */}
+                            <div className="p-4 bg-white/50">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {item.options.map((option, idx) => {
+                                        let btnClass = "py-3 px-4 rounded-lg font-bold text-lg text-left transition-all border-2 relative ";
+                                        
+                                        if (isAnswered) {
+                                            if (option === item.answer) {
+                                                // Correct answer always highlighted green if answered
+                                                btnClass += "bg-green-500 text-white border-green-600 shadow-md";
+                                            } else if (option === userSelection && !isCorrect) {
+                                                // Wrong selection
+                                                btnClass += "bg-red-500 text-white border-red-600 shadow-md";
+                                            } else {
+                                                // Other options
+                                                btnClass += "bg-stone-50 text-stone-400 border-transparent opacity-50";
+                                            }
+                                        } else {
+                                            // Default state
+                                            btnClass += "bg-white text-stone-700 border-stone-200 hover:border-orange-400 hover:bg-orange-50 active:scale-95";
+                                        }
+
+                                        return (
+                                            <button
+                                                key={idx}
+                                                onClick={() => !isAnswered && handleSelect(item.id, option)}
+                                                disabled={isAnswered}
+                                                className={btnClass}
+                                            >
+                                                {option}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {isAnswered && !isCorrect && (
+                                    <div className="mt-3 text-sm text-red-600 font-medium animate-in fade-in slide-in-from-top-1 bg-red-50 p-2 rounded border border-red-100">
+                                        正確答案：{item.answer}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+              </div>
+
+              {/* Bottom Complete Message */}
+              {progress === 100 && (
+                <div className="mt-8 p-8 bg-green-100 rounded-2xl text-center border-2 border-green-300 animate-in zoom-in duration-300">
+                    <h3 className="text-2xl font-bold text-green-800 mb-2">恭喜完成所有題目！</h3>
+                    <p className="text-green-700">您已經完成了 {data.length} 題的練習。</p>
+                    <button 
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="mt-4 text-green-700 underline hover:text-green-900"
+                    >
+                        回到頂部
+                    </button>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
